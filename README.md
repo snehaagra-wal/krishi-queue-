@@ -88,51 +88,6 @@ krishi-queue-frontend/
 └── firebase.js               # Firebase initialization & configuration
 ```
 
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-- **Node.js**: `v18.17.0` or higher
-- **npm** or **yarn** / **pnpm**
-
-### Installation
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/snehaagra-wal/krishi-queue-.git
-   cd krishi-queue-
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Configure Firebase:**
-   Ensure your Firebase credentials are set in `firebase.js` or through environment variables.
-
-4. **Run the development server:**
-   ```bash
-   npm run dev
-   ```
-
-5. **Open in Browser:**
-   Navigate to [http://localhost:3000](http://localhost:3000) to view the application.
-
----
-
-## 🌐 Deploy to Vercel
-
-The application is optimized for zero-config deployment on **Vercel**:
-
-1. Push this repository to GitHub.
-2. Sign in to [Vercel](https://vercel.com) and click **"Add New Project"**.
-3. Import **`krishi-queue-`**.
-4. Click **"Deploy"**.
-
----
-
 ## Author
 
 Developed with ❤️ by **Sneha Agrawal**  
