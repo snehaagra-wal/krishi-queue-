@@ -133,7 +133,7 @@ The application is optimized for zero-config deployment on **Vercel**:
 
 ---
 
-## 👥 Author
+## Author
 
 Developed with ❤️ by **Sneha Agrawal**  
 *Krishi-Queue Mandi Management System*
