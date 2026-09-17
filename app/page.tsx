@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import TopNavbar from "@/components/TopNavbar";
 import WelcomeHeader from "@/components/WelcomeHeader";
 import MetricsGrid from "@/components/MetricsGrid";
@@ -14,6 +14,7 @@ import FarmersView from "@/components/FarmersView";
 import CentersView from "@/components/CentersView";
 import AuthView, { UserSession } from "@/components/AuthView";
 import FarmerPortalView from "@/components/FarmerPortalView";
+import LandingPageView from "@/components/LandingPageView";
 import {
   CheckCircle2,
   Info,
@@ -29,13 +30,71 @@ import {
   BarChart3,
 } from "lucide-react";
 
+import {
+  subscribeToCheckins,
+  subscribeToFarmers,
+  seedInitialDataIfEmpty,
+  CheckinItem,
+  Farmer,
+} from "@/lib/firestoreService";
+
 export default function Home() {
-  // Current logged in user session (null = shows Auth/Login page)
+  // Current logged in user session (null = shows Landing Page with Auth Modal)
   const [currentUser, setCurrentUser] = useState<UserSession | null>(null);
+
+  // Auth modal toggle & role state for Public Landing Page
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalRole, setAuthModalRole] = useState<"farmer" | "manager">("farmer");
 
   // Active navigation tab for Manager view
   const [activeTab, setActiveTab] = useState<string>("Overview");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Live Firestore checkins & farmers for Dashboard metrics
+  const [liveCheckins, setLiveCheckins] = useState<CheckinItem[]>([]);
+  const [liveFarmers, setLiveFarmers] = useState<Farmer[]>([]);
+
+  // 1. Auto-seed sample data if database is empty on mount & subscribe to live collections
+  useEffect(() => {
+    seedInitialDataIfEmpty().then((seeded) => {
+      if (seeded) {
+        console.log("Krishi-Queue: Seeded initial sample data into Firestore.");
+      }
+    });
+
+    const unsubCheckins = subscribeToCheckins((items) => {
+      setLiveCheckins(items);
+    });
+
+    const unsubFarmers = subscribeToFarmers((farmersList) => {
+      setLiveFarmers(farmersList);
+    });
+
+    return () => {
+      unsubCheckins();
+      unsubFarmers();
+    };
+  }, []);
+
+  // Compute live dashboard metrics directly from real database documents (Zero mock fallback)
+  const liveBookingsCount = liveCheckins.length;
+  const liveQueueCount = liveCheckins.filter(
+    (c) =>
+      c.status === "Waiting" ||
+      c.status === "Called" ||
+      c.status === "In Progress" ||
+      c.status === "Serving"
+  ).length;
+  const liveProcuredQuintals = Math.round(
+    liveCheckins
+      .filter((c) => c.status === "Completed" || c.status === "Verified")
+      .reduce((sum, c) => sum + (c.quantityNum || parseFloat(c.quantity) || 0), 0)
+  );
+  const liveCapacityPercent = Math.min(
+    100,
+    Math.round((liveQueueCount / 24) * 100)
+  );
+  const liveFarmersCount = liveFarmers.length;
 
   // Quick action toast handler
   const triggerToast = (msg: string) => {
@@ -56,7 +115,7 @@ export default function Home() {
     triggerToast("You have been logged out safely.");
   };
 
-  // 1. If not logged in, show clean Login/Signup page with role selector
+  // 1. If not logged in, show aesthetic Public Agricultural Landing Page with Sign In modal
   if (!currentUser) {
     return (
       <>
@@ -66,7 +125,33 @@ export default function Home() {
             <span>{toastMessage}</span>
           </div>
         )}
-        <AuthView onLogin={handleLogin} />
+
+        {/* Public Homepage / Landing Page */}
+        <LandingPageView
+          onOpenAuth={(role = "farmer") => {
+            setAuthModalRole(role);
+            setIsAuthModalOpen(true);
+          }}
+          showToast={triggerToast}
+          totalCentersCount={68}
+          totalCheckinsCount={liveBookingsCount}
+          totalGrainQuintals={liveProcuredQuintals}
+          activeQueueCount={liveQueueCount}
+          registeredFarmersCount={liveFarmersCount}
+        />
+
+        {/* Modal Overlay for Sign In / Register */}
+        {isAuthModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-zinc-950/75 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
+            <div className="relative w-full max-w-md my-auto">
+              <AuthView
+                onLogin={handleLogin}
+                initialRole={authModalRole}
+                onClose={() => setIsAuthModalOpen(false)}
+              />
+            </div>
+          </div>
+        )}
       </>
     );
   }
@@ -83,8 +168,11 @@ export default function Home() {
         )}
         <FarmerPortalView
           farmerName={currentUser.name}
-          farmerPhone={currentUser.identifier}
+          farmerPhone={/^\+?\d{10,12}$/.test((currentUser.identifier || "").replace(/[\s-]/g, "")) ? currentUser.identifier : ""}
           farmerLocation={currentUser.location}
+          farmerCenter={currentUser.center}
+          farmerId={currentUser.farmerId}
+          initialAadhaarVerified={currentUser.aadhaarVerified}
           onLogout={handleLogout}
           showToast={triggerToast}
         />
@@ -95,11 +183,15 @@ export default function Home() {
   // 3. If logged in as Manager, show Manager Role View (Main Dashboard)
   return (
     <div className="min-h-screen bg-[#edf1ed] text-zinc-900 font-sans flex flex-col antialiased selection:bg-emerald-200 selection:text-emerald-950">
-      {/* 1. Top Navigation Bar with Logout */}
+      {/* 1. Top Navigation Bar with Logout & Dynamic Manager Profile */}
       <TopNavbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onLogout={handleLogout}
+        managerName={currentUser.name}
+        managerEmail={currentUser.identifier}
+        managerCenter={currentUser.center}
+        managerPhotoUrl={currentUser.photoUrl}
       />
 
       {/* Floating Toast Notification */}
@@ -125,6 +217,10 @@ export default function Home() {
             <>
               {/* 2. Welcome Section */}
               <WelcomeHeader
+                managerName={currentUser.name}
+                managerCenter={currentUser.center}
+                managerId="MGR-501"
+                managerPhotoUrl={currentUser.photoUrl}
                 onExportReport={() =>
                   triggerToast("Daily Gate Pass & Inflow Summary PDF generated!")
                 }
@@ -138,10 +234,11 @@ export default function Home() {
                 {/* 3. Top Metrics Row (4 Cards in 2x2 Grid) - Left Column (5/12) */}
                 <div className="lg:col-span-5 flex flex-col justify-between">
                   <MetricsGrid
-                    bookingsCount={142}
-                    queueCount={18}
-                    procuredQuintals={340}
-                    capacityPercent={85}
+                    bookingsCount={liveBookingsCount}
+                    queueCount={liveQueueCount}
+                    procuredQuintals={liveProcuredQuintals}
+                    capacityPercent={liveCapacityPercent}
+                    registeredFarmersCount={liveFarmersCount}
                   />
                 </div>
 
@@ -166,7 +263,10 @@ export default function Home() {
 
                 {/* 6. Recent Activity Table (Bottom Right - 7/12) */}
                 <div className="lg:col-span-7 flex flex-col">
-                  <RecentFarmerCheckins />
+                  <RecentFarmerCheckins
+                    showToast={triggerToast}
+                    managerCenter={currentUser?.center}
+                  />
                 </div>
               </div>
             </>
@@ -174,7 +274,10 @@ export default function Home() {
 
           {/* Centers View */}
           {activeTab === "Centers" && (
-            <CentersView onReturnToDashboard={() => setActiveTab("Overview")} />
+            <CentersView
+              onReturnToDashboard={() => setActiveTab("Overview")}
+              showToast={triggerToast}
+            />
           )}
 
           {/* Farmers Directory View */}
@@ -195,7 +298,10 @@ export default function Home() {
 
           {/* Analytics View */}
           {activeTab === "Analytics" && (
-            <AnalyticsView onReturnToDashboard={() => setActiveTab("Overview")} />
+            <AnalyticsView
+              checkins={liveCheckins}
+              onReturnToDashboard={() => setActiveTab("Overview")}
+            />
           )}
 
           {/* Settings View with Logout */}
@@ -204,6 +310,10 @@ export default function Home() {
               onReturnToDashboard={() => setActiveTab("Overview")}
               showToast={triggerToast}
               onLogout={handleLogout}
+              managerSession={currentUser}
+              onManagerProfileUpdate={(updated) =>
+                setCurrentUser((prev) => (prev ? { ...prev, ...updated } : null))
+              }
             />
           )}
         </div>

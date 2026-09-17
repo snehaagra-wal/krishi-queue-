@@ -8,12 +8,14 @@ import {
   Info,
   Layers,
   ArrowUpRight,
+  Wheat,
 } from "lucide-react";
+import { subscribeToCheckins, CheckinItem } from "@/lib/firestoreService";
 
 interface SlotData {
   time: string;
-  wheat: number; // in Quintals (e.g., lime segment)
-  paddy: number; // in Quintals (e.g., deep emerald segment)
+  wheat: number; // in Quintals (lime segment)
+  paddy: number; // in Quintals (deep emerald segment)
   capacity: number; // line point (0-100 scale)
   trucks: number;
   highlight?: boolean;
@@ -24,12 +26,21 @@ export default function CropInflowChart() {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [animationKey, setAnimationKey] = useState<number>(0);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [checkins, setCheckins] = useState<CheckinItem[]>([]);
+
+  useEffect(() => {
+    // Subscribe to live Firestore checkins for real-time chart data
+    const unsubscribe = subscribeToCheckins((items) => {
+      setCheckins(items);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     // Trigger smooth entrance animation on mount
     const timer = setTimeout(() => setIsLoaded(true), 50);
     return () => clearTimeout(timer);
-  }, [animationKey]);
+  }, [animationKey, checkins]);
 
   const handleReplayAnimation = () => {
     setIsLoaded(false);
@@ -38,28 +49,59 @@ export default function CropInflowChart() {
     }, 40);
   };
 
-  // Data for today's time slots
-  const data: SlotData[] = [
-    { time: "08 AM", wheat: 18, paddy: 26, capacity: 44, trucks: 6 },
-    { time: "10 AM", wheat: 24, paddy: 38, capacity: 62, trucks: 9, highlight: true },
-    { time: "12 PM", wheat: 14, paddy: 42, capacity: 56, trucks: 8 },
-    { time: "02 PM", wheat: 28, paddy: 48, capacity: 76, trucks: 12, highlight: true },
-    { time: "04 PM", wheat: 22, paddy: 34, capacity: 56, trucks: 7 },
-    { time: "06 PM", wheat: 26, paddy: 30, capacity: 56, trucks: 6 },
-    { time: "08 PM", wheat: 16, paddy: 24, capacity: 40, trucks: 4 },
-  ];
+  // Compute live hourly buckets from Firestore checkins
+  const slotLabels = ["08 AM", "10 AM", "12 PM", "02 PM", "04 PM", "06 PM", "08 PM"];
+
+  const data: SlotData[] = slotLabels.map((timeLabel) => {
+    const matched = checkins.filter((c) => {
+      const t = (c.slotTime || "").toUpperCase();
+      if (timeLabel === "08 AM") return t.includes("08:00") || t.includes("8:00") || t.includes("08 AM");
+      if (timeLabel === "10 AM") return t.includes("09:00") || t.includes("10:00") || t.includes("10 AM");
+      if (timeLabel === "12 PM") return t.includes("11:00") || t.includes("12:00") || t.includes("12 PM");
+      if (timeLabel === "02 PM") return t.includes("01:00") || t.includes("02:00") || t.includes("02 PM");
+      if (timeLabel === "04 PM") return t.includes("03:00") || t.includes("04:00") || t.includes("04 PM");
+      if (timeLabel === "06 PM") return t.includes("05:00") || t.includes("06:00") || t.includes("06 PM");
+      if (timeLabel === "08 PM") return t.includes("07:00") || t.includes("08:00") || t.includes("08 PM");
+      return false;
+    });
+
+    let wheat = 0;
+    let paddy = 0;
+
+    matched.forEach((c) => {
+      const q = c.quantityNum || parseFloat(c.quantity) || 0;
+      const crop = (c.cropType || "").toLowerCase();
+      if (crop.includes("wheat")) {
+        wheat += q;
+      } else {
+        paddy += q;
+      }
+    });
+
+    return {
+      time: timeLabel,
+      wheat: Math.round(wheat),
+      paddy: Math.round(paddy),
+      capacity: Math.min(100, Math.round(((wheat + paddy) / 40) * 100)),
+      trucks: matched.length,
+      highlight: matched.length > 0,
+    };
+  });
+
+  const totalInflowQuintals = data.reduce((sum, d) => sum + d.wheat + d.paddy, 0);
+  const peakSlot = [...data].sort((a, b) => (b.wheat + b.paddy) - (a.wheat + a.paddy))[0];
 
   // SVG dimensions for the overlay line graph
   const svgWidth = 560;
   const svgHeight = 220;
-  const maxVal = 60; // Max quintals scale for bars
+  const maxVal = Math.max(...data.map((d) => d.wheat + d.paddy), 40); // Dynamic scale
 
   // Calculate coordinates for the line chart (total inflow curve)
   const linePoints = data.map((d, i) => {
     const x = 40 + i * ((svgWidth - 80) / (data.length - 1));
     const total = d.wheat + d.paddy;
-    // Map total quintals (0 to 80) to Y (svgHeight-30 down to 25)
-    const y = svgHeight - 25 - (total / 85) * (svgHeight - 55);
+    // When total is 0, line stays flat at base level
+    const y = total === 0 ? svgHeight - 25 : svgHeight - 25 - (total / (maxVal * 1.2)) * (svgHeight - 55);
     return { x, y, total };
   });
 
@@ -218,13 +260,28 @@ export default function CropInflowChart() {
           </svg>
         </div>
 
-        {/* Bars Container: Capsule Rounded Pill Bars (Inspired directly by Dribbble reference) */}
+        {/* Zero-State Overlay when totalInflowQuintals === 0 */}
+        {totalInflowQuintals === 0 && (
+          <div className="absolute inset-x-8 top-12 bottom-10 bg-white/85 backdrop-blur-2xs flex flex-col items-center justify-center text-center p-4 rounded-2xl border border-dashed border-emerald-300 z-20 shadow-xs animate-in fade-in duration-200">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-800 flex items-center justify-center mb-2 border border-emerald-100">
+              <Wheat className="w-5 h-5 text-emerald-700" />
+            </div>
+            <h4 className="text-xs font-bold text-zinc-900">
+              Clean Slate Dashboard • Zero Crop Inflow
+            </h4>
+            <p className="text-[11px] text-zinc-500 max-w-sm mt-1 leading-relaxed">
+              No arrivals recorded in Firestore yet. Once newly registered farmers (e.g. Sneha) book slots, live telemetry and inflow curves will dynamically expand here.
+            </p>
+          </div>
+        )}
+
+        {/* Bars Container: Capsule Rounded Pill Bars */}
         <div className="relative pl-10 pr-4 flex items-end justify-between h-[210px] z-10">
           {data.map((item, index) => {
             const isHovered = hoveredIndex === index;
             // Height percentages
-            const paddyHeight = (item.paddy / maxVal) * 100;
-            const wheatHeight = (item.wheat / maxVal) * 100;
+            const paddyHeight = totalInflowQuintals === 0 ? 0 : (item.paddy / maxVal) * 100;
+            const wheatHeight = totalInflowQuintals === 0 ? 0 : (item.wheat / maxVal) * 100;
             const totalQuintals = item.paddy + item.wheat;
 
             return (
@@ -235,7 +292,7 @@ export default function CropInflowChart() {
                 onMouseLeave={() => setHoveredIndex(null)}
               >
                 {/* Floating Interactive Tooltip */}
-                {isHovered && (
+                {isHovered && totalQuintals > 0 && (
                   <div className="absolute -top-16 z-30 bg-zinc-900 text-white rounded-xl px-3 py-2 text-xs shadow-xl border border-zinc-700 pointer-events-none flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-150 whitespace-nowrap">
                     <div className="flex items-center justify-between gap-3 font-semibold border-b border-zinc-700 pb-1">
                       <span>{item.time} Slot</span>
@@ -247,31 +304,31 @@ export default function CropInflowChart() {
                       <span>Paddy: <strong className="text-emerald-400">{item.paddy}Q</strong></span>
                     </div>
                     <div className="text-[10px] text-zinc-400">
-                      {item.trucks} Trucks Unloaded • Moisture Avg 12.1%
+                      {item.trucks} Trucks Registered
                     </div>
                   </div>
                 )}
 
-                {/* Capsule Pill Bar Structure (Top Pill + Bottom Pill) */}
+                {/* Capsule Pill Bar Structure */}
                 <div
                   className="w-7 sm:w-9 md:w-10 flex flex-col items-center gap-1.5 justify-end h-full transition-transform duration-200 group-hover:scale-105"
                   style={{ transformOrigin: "bottom" }}
                 >
-                  {/* Top Capsule: Wheat Inflow (Lime Green #84cc16) */}
+                  {/* Top Capsule: Wheat Inflow */}
                   <div
                     className="w-full rounded-full bg-[#84cc16] shadow-sm transition-all duration-700 ease-out"
                     style={{
-                      height: isLoaded ? `${wheatHeight}%` : "0%",
+                      height: isLoaded && totalInflowQuintals > 0 ? `${wheatHeight}%` : "0%",
                       transitionDelay: `${index * 80 + 100}ms`,
                       opacity: isLoaded ? 1 : 0,
                     }}
                   />
 
-                  {/* Bottom Capsule: Paddy Processed (Deep Emerald #047857) */}
+                  {/* Bottom Capsule: Paddy Processed */}
                   <div
                     className="w-full rounded-full bg-[#047857] shadow-sm transition-all duration-700 ease-out"
                     style={{
-                      height: isLoaded ? `${paddyHeight}%` : "0%",
+                      height: isLoaded && totalInflowQuintals > 0 ? `${paddyHeight}%` : "0%",
                       transitionDelay: `${index * 80}ms`,
                       opacity: isLoaded ? 1 : 0,
                     }}
@@ -299,11 +356,17 @@ export default function CropInflowChart() {
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
           <span>
-            Peak inflow recorded between <strong className="text-zinc-800 font-semibold">01:30 PM - 02:30 PM</strong> (48 Quintals cleared).
+            {totalInflowQuintals > 0 ? (
+              <>
+                Peak inflow: <strong className="text-zinc-800 font-semibold">{peakSlot?.time}</strong> ({peakSlot ? peakSlot.wheat + peakSlot.paddy : 0} Q recorded).
+              </>
+            ) : (
+              <span>Telemetry active • Awaiting live grain arrivals at APMC gates.</span>
+            )}
           </span>
         </div>
         <div className="flex items-center gap-1.5 font-medium text-emerald-800">
-          <span>Weighbridge Throughput: 98.4%</span>
+          <span>Weighbridge Status: {totalInflowQuintals > 0 ? "Active Inflow" : "Standby"}</span>
           <ArrowUpRight className="w-3.5 h-3.5" />
         </div>
       </div>

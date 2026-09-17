@@ -17,21 +17,23 @@ interface MetricsGridProps {
   queueCount?: number;
   procuredQuintals?: number;
   capacityPercent?: number;
+  registeredFarmersCount?: number;
 }
 
 export default function MetricsGrid({
-  bookingsCount = 142,
-  queueCount = 18,
-  procuredQuintals = 340,
-  capacityPercent = 85,
+  bookingsCount = 0,
+  queueCount = 0,
+  procuredQuintals = 0,
+  capacityPercent = 0,
+  registeredFarmersCount = 0,
 }: MetricsGridProps) {
   const cards = [
     {
       id: "bookings",
       title: "Total Bookings Today",
       value: `${bookingsCount}`,
-      unit: "Slots",
-      badge: "+12% Today",
+      unit: "Tokens",
+      badge: `${registeredFarmersCount} Farmers Reg.`,
       badgeType: "positive",
       icon: CalendarDays,
       iconBg: "bg-emerald-50 text-emerald-700 border-emerald-100",
@@ -41,14 +43,14 @@ export default function MetricsGrid({
       path: "M 0 26 C 15 28, 25 15, 45 18 C 65 21, 75 8, 95 10 C 115 12, 125 3, 140 2",
       areaPath:
         "M 0 26 C 15 28, 25 15, 45 18 C 65 21, 75 8, 95 10 C 115 12, 125 3, 140 2 L 140 36 L 0 36 Z",
-      subtext: "128 Verified & Arrived",
+      subtext: `${registeredFarmersCount} Registered in Firestore`,
     },
     {
       id: "queue",
       title: "Farmers in Queue",
       value: `${queueCount}`,
       unit: "Active",
-      badge: "Avg wait 14m",
+      badge: queueCount > 0 ? "Active Inflow" : "Zero Wait",
       badgeType: "neutral",
       icon: Users,
       iconBg: "bg-amber-50 text-amber-700 border-amber-100",
@@ -58,14 +60,14 @@ export default function MetricsGrid({
       path: "M 0 12 C 20 10, 30 24, 50 20 C 70 16, 85 28, 105 18 C 120 10, 130 15, 140 12",
       areaPath:
         "M 0 12 C 20 10, 30 24, 50 20 C 70 16, 85 28, 105 18 C 120 10, 130 15, 140 12 L 140 36 L 0 36 Z",
-      subtext: "4 at Gate, 14 in Waiting Bay",
+      subtext: queueCount > 0 ? `${queueCount} vehicles in Mandi queue` : "Queue currently clear",
     },
     {
       id: "procured",
       title: "Procured Today",
       value: `${procuredQuintals}`,
       unit: "Quintals",
-      badge: "+18% Target met",
+      badge: procuredQuintals > 0 ? `${procuredQuintals} Q Cleared` : "0 Q Intake",
       badgeType: "positive",
       icon: Wheat,
       iconBg: "bg-lime-50 text-lime-800 border-lime-100",
@@ -75,7 +77,7 @@ export default function MetricsGrid({
       path: "M 0 30 C 25 28, 40 22, 65 20 C 85 18, 100 10, 120 7 C 130 5, 135 4, 140 2",
       areaPath:
         "M 0 30 C 25 28, 40 22, 65 20 C 85 18, 100 10, 120 7 C 130 5, 135 4, 140 2 L 140 36 L 0 36 Z",
-      subtext: "Wheat: 210Q • Paddy: 130Q",
+      subtext: procuredQuintals > 0 ? `${procuredQuintals} Quintals weighed & verified` : "Awaiting first batch arrival",
     },
     {
       id: "capacity",
@@ -92,7 +94,7 @@ export default function MetricsGrid({
       path: "M 0 18 C 20 16, 35 12, 60 14 C 80 16, 95 8, 115 10 C 125 11, 135 9, 140 8",
       areaPath:
         "M 0 18 C 20 16, 35 12, 60 14 C 80 16, 95 8, 115 10 C 125 11, 135 9, 140 8 L 140 36 L 0 36 Z",
-      subtext: "Optimal clearance pace",
+      subtext: capacityPercent > 0 ? `${capacityPercent}% bay capacity used` : "All inspection bays ready",
     },
   ];
 

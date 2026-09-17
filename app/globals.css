@@ -2,7 +2,7 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #18181b;
 }
 
 @theme inline {
@@ -12,18 +12,37 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: #f1f4f0;
-  color: var(--foreground);
+  color: #18181b;
   font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   overflow-x: hidden;
+}
+
+/* Bulletproof Global Input, Select, and Textarea styles */
+input,
+select,
+textarea {
+  color: #18181b !important;
+  background-color: #ffffff;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #71717a !important;
+  opacity: 1;
+}
+
+select option {
+  color: #18181b !important;
+  background-color: #ffffff !important;
+}
+
+/* Specific styling for date & time inputs */
+input[type="date"],
+input[type="time"] {
+  color: #18181b !important;
+  color-scheme: light !important;
 }
 
 @keyframes growBarUp {
@@ -90,4 +109,3 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
-

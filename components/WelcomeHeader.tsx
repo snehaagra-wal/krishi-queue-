@@ -15,33 +15,57 @@ import {
 interface WelcomeHeaderProps {
   onExportReport?: () => void;
   onViewBays?: () => void;
+  managerName?: string;
+  managerCenter?: string;
+  managerId?: string;
+  managerPhotoUrl?: string;
 }
 
 export default function WelcomeHeader({
   onExportReport,
   onViewBays,
+  managerName = "Saurabh",
+  managerCenter = "APMC Mandi Hub",
+  managerId = "MGR-501",
+  managerPhotoUrl,
 }: WelcomeHeaderProps) {
+  const formattedDate = new Date().toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 pt-1">
       {/* Title and Subtitle */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-900">
-          Welcome to Krishi-Queue
-        </h1>
-        <div className="flex flex-wrap items-center gap-y-1.5 gap-x-3 mt-1.5 text-xs sm:text-sm text-zinc-600">
-          <div className="flex items-center gap-1.5 font-medium text-zinc-700">
-            <Calendar className="w-4 h-4 text-emerald-700" />
-            <span>Saturday, 5 September 2026</span>
-          </div>
-          <span className="hidden sm:inline text-zinc-300">•</span>
-          <div className="flex items-center gap-1.5 text-zinc-600">
-            <MapPin className="w-3.5 h-3.5 text-emerald-700" />
-            <span>Mandi Center: <strong className="text-zinc-800 font-semibold">APMC Karnal Main Hub</strong></span>
-          </div>
-          <span className="hidden sm:inline text-zinc-300">•</span>
-          <div className="flex items-center gap-1.5 text-zinc-600">
-            <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
-            <span>Manager: <strong className="text-zinc-800 font-semibold">Rajesh Sharma</strong> (ID: MGR-4029)</span>
+      <div className="flex items-center gap-3.5">
+        {managerPhotoUrl && (
+          <img
+            src={managerPhotoUrl}
+            alt={managerName}
+            className="w-12 h-12 rounded-full object-cover border-2 border-emerald-500 shadow-md shrink-0 hidden sm:block"
+          />
+        )}
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-900">
+            Welcome to Krishi-Queue
+          </h1>
+          <div className="flex flex-wrap items-center gap-y-1.5 gap-x-3 mt-1.5 text-xs sm:text-sm text-zinc-600">
+            <div className="flex items-center gap-1.5 font-medium text-zinc-700">
+              <Calendar className="w-4 h-4 text-emerald-700" />
+              <span>{formattedDate}</span>
+            </div>
+            <span className="hidden sm:inline text-zinc-300">•</span>
+            <div className="flex items-center gap-1.5 text-zinc-600">
+              <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Mandi Center: <strong className="text-zinc-800 font-semibold">{managerCenter}</strong></span>
+            </div>
+            <span className="hidden sm:inline text-zinc-300">•</span>
+            <div className="flex items-center gap-1.5 text-zinc-600">
+              <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Manager: <strong className="text-zinc-800 font-semibold">{managerName}</strong> (ID: {managerId})</span>
+            </div>
           </div>
         </div>
       </div>

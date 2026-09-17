@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   User,
   Bell,
@@ -25,33 +25,100 @@ import {
   KeyRound,
   Users,
   Check,
+  RefreshCw,
+  Camera,
+  Upload,
 } from "lucide-react";
+import {
+  saveManagerProfile,
+  purgeMockDataFromFirestore,
+} from "@/lib/firestoreService";
+import { db } from "@/firebase";
+import { collection, getDocs } from "firebase/firestore";
 
 interface SettingsViewProps {
   onReturnToDashboard?: () => void;
   showToast?: (message: string) => void;
   onLogout?: () => void;
+  managerSession?: {
+    role: "farmer" | "manager";
+    name: string;
+    identifier: string;
+    center?: string;
+    photoUrl?: string;
+  } | null;
+  onManagerProfileUpdate?: (updated: {
+    name: string;
+    identifier: string;
+    center?: string;
+    photoUrl?: string;
+  }) => void;
 }
 
 export default function SettingsView({
   onReturnToDashboard,
   showToast,
   onLogout,
+  managerSession,
+  onManagerProfileUpdate,
 }: SettingsViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<
     "profile" | "notifications" | "theme" | "security" | "backup"
   >("profile");
 
-  // 1. Profile state
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // 1. Profile state (Requirement 4: Manager Profile Picture)
   const [profile, setProfile] = useState({
-    name: "Rajesh Sharma",
-    email: "rajesh.sharma@apmc-karnal.gov.in",
+    name: managerSession?.name || "Saurabh",
+    email: managerSession?.identifier || "saurabh@krishiqueue.gov.in",
     role: "Chief Mandi Superintendent",
-    phone: "+91 98120 45678",
-    centerName: "APMC Karnal Main Hub",
+    phone: "+91 98765 43210",
+    centerName: managerSession?.center || "APMC Mandi Hub",
     yardId: "Yard #4 - North Gate 1-A",
+    photoUrl: managerSession?.photoUrl || "",
   });
   const [profileSaved, setProfileSaved] = useState(false);
+  const [isSavingManagerProfile, setIsSavingManagerProfile] = useState(false);
+
+  // Profile photo upload with canvas compression
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const maxDim = 240;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+        const compressedBase64 = canvas.toDataURL("image/jpeg", 0.85);
+        setProfile((prev) => ({ ...prev, photoUrl: compressedBase64 }));
+        if (showToast) {
+          showToast("Manager profile photo loaded! Click Save Changes to update Firestore.");
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   // 2. Notification preferences state
   const [notifications, setNotifications] = useState({
@@ -102,12 +169,12 @@ export default function SettingsView({
     },
   ]);
 
-  const [staffRoles] = useState([
-    { name: "Rajesh Sharma", role: "Superintendent", access: "Full Control", status: "Active" },
+  const staffRoles = [
+    { name: profile.name || "Saurabh", role: "Superintendent", access: "Full Control", status: "Active" },
     { name: "Kavita Singh", role: "Weighbridge Incharge", access: "Bays 1-4 Operations", status: "Active" },
     { name: "R. K. Verma", role: "Moisture & Quality Officer", access: "Lab Verification", status: "Active" },
     { name: "S. Rao", role: "Gate Registrar", access: "Token & Entry Passes", status: "Active" },
-  ]);
+  ];
 
   const [twoFactorAuth, setTwoFactorAuth] = useState(true);
 
@@ -115,15 +182,43 @@ export default function SettingsView({
   const [exportRange, setExportRange] = useState<"today" | "week" | "month">("today");
   const [isExporting, setIsExporting] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isResettingFirestore, setIsResettingFirestore] = useState(false);
   const [lastBackupTime, setLastBackupTime] = useState("Today at 04:00 PM (e-NAM Cloud)");
 
-  const handleProfileSave = (e: React.FormEvent) => {
+  const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setProfileSaved(true);
-    if (showToast) {
-      showToast("Profile and account details updated successfully!");
+    setIsSavingManagerProfile(true);
+    try {
+      await saveManagerProfile({
+        name: profile.name.trim(),
+        email: profile.email.trim(),
+        phone: profile.phone.trim(),
+        role: profile.role.trim(),
+        centerName: profile.centerName.trim(),
+        yardId: profile.yardId.trim(),
+        photoUrl: profile.photoUrl,
+      });
+      if (onManagerProfileUpdate) {
+        onManagerProfileUpdate({
+          name: profile.name.trim(),
+          identifier: profile.email.trim(),
+          center: profile.centerName.trim(),
+          photoUrl: profile.photoUrl,
+        });
+      }
+      setProfileSaved(true);
+      if (showToast) {
+        showToast("Manager Profile updated and saved directly to Firestore!");
+      }
+      setTimeout(() => setProfileSaved(false), 3000);
+    } catch (err: any) {
+      console.error("Error saving manager profile:", err);
+      if (showToast) {
+        showToast("Failed to save profile: " + (err.message || ""));
+      }
+    } finally {
+      setIsSavingManagerProfile(false);
     }
-    setTimeout(() => setProfileSaved(false), 3000);
   };
 
   const handleRevokeSession = (sessionId: string) => {
@@ -133,24 +228,72 @@ export default function SettingsView({
     }
   };
 
-  const handleExportCSV = () => {
+  const handlePurgeMockData = async () => {
+    if (
+      !confirm(
+        "Clean Slate: This will delete all fake/mock checkins and fake farmers from Firestore so the dashboard stats start fresh from 0. Real procurement centers will be preserved. Proceed?"
+      )
+    ) {
+      return;
+    }
+
+    setIsResettingFirestore(true);
+    try {
+      const res = await purgeMockDataFromFirestore();
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage?.clear();
+          window.sessionStorage?.clear();
+        } catch (e) {
+          console.warn("Storage clearance notice:", e);
+        }
+      }
+      if (showToast) {
+        showToast(
+          `Clean Slate Activated! Purged ${res.deletedCheckins} mock tokens & ${res.deletedFarmers} fake farmers. LocalStorage wiped clean. Next token is strictly #TK-1.`
+        );
+      }
+    } catch (err: any) {
+      console.error("Failed to purge mock data:", err);
+      if (showToast) {
+        showToast("Failed to purge mock data: " + (err.message || ""));
+      }
+    } finally {
+      setIsResettingFirestore(false);
+    }
+  };
+
+  const handleExportCSV = async () => {
     setIsExporting(true);
 
-    setTimeout(() => {
-      // Create actual dummy CSV content for Krishi procurement
+    try {
+      const snap = await getDocs(collection(db, "checkins"));
       const csvRows = [
-        ["Token ID", "Farmer Name", "Village", "Crop Variety", "Quantity (Quintals)", "Slot Window", "Inspection Bay", "Status", "MSP Rate (INR/Q)", "Estimated Payout (INR)"],
-        ["TK-108", "Gurpreet Singh", "Nilokheri", "Sharbati Wheat", "42.5", "10:00 AM - 10:45 AM", "Bay 3 (Weighbridge)", "In Progress", "2275", "96687.50"],
-        ["TK-107", "Rameshwar Patel", "Gharaunda", "Basmati 1121", "38.0", "09:30 AM - 10:15 AM", "Bay 1 (Cleared)", "Completed", "3850", "146300.00"],
-        ["TK-106", "Sukhdev Yadav", "Taraori", "Mustard Seeds", "24.2", "10:30 AM - 11:15 AM", "Gate 1-A Queue", "Waiting", "5650", "136730.00"],
-        ["TK-105", "Harpreet Kaur", "Indri", "Sharbati Wheat", "51.0", "09:00 AM - 09:45 AM", "Bay 4 (Silo 2)", "Completed", "2275", "116025.00"],
-        ["TK-104", "Balwinder Sandhu", "Karnal Rural", "Gram / Chana", "19.8", "11:00 AM - 11:45 AM", "Bay 2 (Moisture Test)", "Verified", "5440", "107712.00"],
-        ["TK-103", "Jagtar Dhillon", "Assandh", "Basmati 1121", "44.0", "08:30 AM - 09:15 AM", "Bay 3 (Cleared)", "Completed", "3850", "169400.00"],
+        ["Token ID", "Farmer Name", "Village", "Crop Variety", "Quantity", "Slot Window", "Inspection Bay", "Status", "Estimated Payout"],
       ];
+
+      if (snap.empty) {
+        csvRows.push(["-", "No checkins recorded in database yet", "-", "-", "-", "-", "-", "-", "-"]);
+      } else {
+        snap.docs.forEach((docSnap) => {
+          const d = docSnap.data();
+          csvRows.push([
+            d.tokenId || docSnap.id,
+            d.farmerName || "Farmer",
+            d.village || "N/A",
+            d.cropType || "Wheat",
+            d.quantity || "0 Quintals",
+            d.slotTime || "N/A",
+            d.bay || "N/A",
+            d.status || "Waiting",
+            d.payout || "Pending Verification",
+          ]);
+        });
+      }
 
       const csvContent =
         "data:text/csv;charset=utf-8," +
-        csvRows.map((e) => e.map((val) => `"${val}"`).join(",")).join("\n");
+        csvRows.map((e) => e.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(",")).join("\n");
 
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
@@ -163,11 +306,19 @@ export default function SettingsView({
       link.click();
       document.body.removeChild(link);
 
-      setIsExporting(false);
       if (showToast) {
-        showToast("Procurement CSV report generated and downloaded!");
+        showToast(
+          snap.empty
+            ? "Clean slate CSV report generated (0 active checkins in database)."
+            : `Exported ${snap.size} real checkin records from live database!`
+        );
       }
-    }, 600);
+    } catch (err: any) {
+      console.error("Export error:", err);
+      if (showToast) showToast("Failed to export CSV: " + (err.message || ""));
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleManualBackup = () => {
@@ -285,11 +436,36 @@ export default function SettingsView({
                 </p>
               </div>
 
-              {/* Avatar & Identification Header */}
+              {/* Avatar & Identification Header (Requirement 4: Upload Profile Picture) */}
               <div className="flex flex-wrap items-center gap-4 p-4 rounded-2xl bg-zinc-50 border border-zinc-200/70">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-800 to-emerald-600 flex items-center justify-center text-white text-xl font-bold shadow-md ring-4 ring-emerald-100">
-                  RS
-                </div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handlePhotoUpload}
+                  accept="image/*"
+                  className="hidden"
+                />
+                {profile.photoUrl ? (
+                  <div className="relative group">
+                    <img
+                      src={profile.photoUrl}
+                      alt={profile.name}
+                      className="w-16 h-16 rounded-full object-cover shadow-md ring-4 ring-emerald-200 border border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                      title="Upload new photo"
+                    >
+                      <Camera className="w-5 h-5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-emerald-800 to-emerald-600 flex items-center justify-center text-white text-xl font-bold shadow-md ring-4 ring-emerald-100">
+                    {profile.name.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
                 <div className="flex-1 min-w-[200px]">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-zinc-900">
@@ -306,13 +482,25 @@ export default function SettingsView({
                     ✓ Verified Officer (Aadhaar & e-NAM Verified)
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => alert("Avatar photo update simulation: Selected from local storage.")}
-                  className="px-3 py-1.5 bg-white hover:bg-zinc-100 border border-zinc-200 rounded-full text-xs font-medium text-zinc-700 transition cursor-pointer"
-                >
-                  Change Photo
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3.5 py-1.5 bg-white hover:bg-zinc-100 border border-zinc-300 rounded-full text-xs font-semibold text-zinc-800 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>{profile.photoUrl ? "Change Photo" : "Upload Photo"}</span>
+                  </button>
+                  {profile.photoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setProfile((p) => ({ ...p, photoUrl: "" }))}
+                      className="px-2.5 py-1.5 text-rose-600 hover:text-rose-800 text-xs font-medium cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Input Fields Grid */}
@@ -327,7 +515,7 @@ export default function SettingsView({
                     onChange={(e) =>
                       setProfile({ ...profile, name: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 font-medium"
+                    className="w-full px-3.5 py-2 text-xs bg-white text-zinc-900 border border-zinc-300 placeholder:text-zinc-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 font-semibold"
                     required
                   />
                 </div>
@@ -342,7 +530,7 @@ export default function SettingsView({
                     onChange={(e) =>
                       setProfile({ ...profile, email: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 font-medium"
+                    className="w-full px-3.5 py-2 text-xs bg-white text-zinc-900 border border-zinc-300 placeholder:text-zinc-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 font-semibold"
                     required
                   />
                 </div>
@@ -357,24 +545,30 @@ export default function SettingsView({
                     onChange={(e) =>
                       setProfile({ ...profile, role: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 font-medium"
+                    className="w-full px-3.5 py-2 text-xs bg-white text-zinc-900 border border-zinc-300 placeholder:text-zinc-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 font-semibold"
                     required
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 mb-1.5">
-                    Mobile Phone (for OTP & Dispatches)
+                    Mobile Phone (भारत / India +91)
                   </label>
-                  <input
-                    type="tel"
-                    value={profile.phone}
-                    onChange={(e) =>
-                      setProfile({ ...profile, phone: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 font-medium"
-                    required
-                  />
+                  <div className="relative flex items-center">
+                    <span className="absolute left-2.5 flex items-center gap-1 text-[11px] font-bold text-zinc-800 bg-zinc-100 px-1.5 py-0.5 rounded-md border border-zinc-200 select-none">
+                      <span>🇮🇳</span> +91
+                    </span>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      value={profile.phone.replace(/^\+91\s*/, "")}
+                      onChange={(e) =>
+                        setProfile({ ...profile, phone: "+91 " + e.target.value.replace(/\D/g, "").slice(0, 10) })
+                      }
+                      className="w-full pl-19 px-3.5 py-2 text-xs bg-white text-zinc-900 border border-zinc-300 placeholder:text-zinc-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold font-mono tracking-wider"
+                      required
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -387,7 +581,7 @@ export default function SettingsView({
                     onChange={(e) =>
                       setProfile({ ...profile, centerName: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 font-medium"
+                    className="w-full px-3.5 py-2 text-xs bg-white text-zinc-900 border border-zinc-300 placeholder:text-zinc-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 font-semibold"
                   />
                 </div>
 
@@ -401,7 +595,7 @@ export default function SettingsView({
                     onChange={(e) =>
                       setProfile({ ...profile, yardId: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 font-medium"
+                    className="w-full px-3.5 py-2 text-xs bg-white text-zinc-900 border border-zinc-300 placeholder:text-zinc-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 font-semibold"
                   />
                 </div>
               </div>
@@ -531,7 +725,7 @@ export default function SettingsView({
                               thresholdWaitMins: Number(e.target.value),
                             })
                           }
-                          className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-xl"
+                          className="w-full px-3 py-1.5 text-xs bg-white text-zinc-900 border border-zinc-300 font-semibold rounded-xl"
                           min={5}
                           max={60}
                         />
@@ -549,7 +743,7 @@ export default function SettingsView({
                               thresholdQueueSize: Number(e.target.value),
                             })
                           }
-                          className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-200 rounded-xl"
+                          className="w-full px-3 py-1.5 text-xs bg-white text-zinc-900 border border-zinc-300 font-semibold rounded-xl"
                           min={5}
                           max={100}
                         />
@@ -1035,6 +1229,36 @@ export default function SettingsView({
                 >
                   <Database className="w-3.5 h-3.5 text-zinc-600" />
                   <span>{isBackingUp ? "Syncing..." : "Trigger Manual Backup"}</span>
+                </button>
+              </div>
+
+              {/* Firestore Real-Time Database Management Card */}
+              <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-50/70 to-white border border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-bold text-zinc-900">
+                      Clean Slate & Zero-State Database Management
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      ● Live Firestore Synced
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-600">
+                    Purge all legacy mock tokens & fake farmers to guarantee a 100% clean zero-state dashboard for new registrations.
+                  </p>
+                  <p className="text-[10px] text-emerald-800 font-medium">
+                    ✓ Clean slate: Real numbers and live charts will grow strictly from fresh registrations (e.g. Saurabh & Sneha).
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handlePurgeMockData}
+                  disabled={isResettingFirestore}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold rounded-full shadow-xs transition cursor-pointer shrink-0 disabled:opacity-50"
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>{isResettingFirestore ? "Purging Mock Data..." : "Purge Mock Data & Reset Clean Slate"}</span>
                 </button>
               </div>
             </div>

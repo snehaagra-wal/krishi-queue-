@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Bell,
   Settings,
@@ -9,17 +9,45 @@ import {
   Clock,
   AlertTriangle,
   LogOut,
+  Sparkles,
 } from "lucide-react";
+import {
+  subscribeToNotifications,
+  type MandiNotification,
+} from "@/lib/firestoreService";
 
 interface TopNavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onLogout?: () => void;
+  managerName?: string;
+  managerEmail?: string;
+  managerCenter?: string;
+  managerPhotoUrl?: string;
 }
 
-export default function TopNavbar({ activeTab, setActiveTab, onLogout }: TopNavbarProps) {
+export default function TopNavbar({
+  activeTab,
+  setActiveTab,
+  onLogout,
+  managerName = "Saurabh",
+  managerEmail = "saurabh@krishiqueue.gov.in",
+  managerCenter = "APMC Mandi Hub",
+  managerPhotoUrl,
+}: TopNavbarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  const [notifications, setNotifications] = useState<MandiNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const unsub = subscribeToNotifications((liveNotifs) => {
+      setNotifications(liveNotifs);
+      setUnreadCount(liveNotifs.length);
+    });
+    return () => unsub();
+  }, []);
 
   const navLinks = [
     { name: "Overview", id: "Overview" },
@@ -27,30 +55,6 @@ export default function TopNavbar({ activeTab, setActiveTab, onLogout }: TopNavb
     { name: "Farmers", id: "Farmers" },
     { name: "Slots & Queue", id: "Slots & Queue" },
     { name: "Analytics", id: "Analytics" },
-  ];
-
-  const notifications = [
-    {
-      id: 1,
-      title: "Bay 3 Weighbridge Cleared",
-      desc: "Token #TK-107 completed weighing (38.5 Quintals).",
-      time: "2 mins ago",
-      type: "success",
-    },
-    {
-      id: 2,
-      title: "Queue Delay Warning",
-      desc: "Moisture test bay has 4 farmers waiting. Action required.",
-      time: "12 mins ago",
-      type: "warning",
-    },
-    {
-      id: 3,
-      title: "Daily Procurement Quota",
-      desc: "Center has reached 85% of target wheat procurement.",
-      time: "35 mins ago",
-      type: "info",
-    },
   ];
 
   return (
@@ -121,24 +125,29 @@ export default function TopNavbar({ activeTab, setActiveTab, onLogout }: TopNavb
               onClick={() => {
                 setShowNotifications(!showNotifications);
                 setShowProfileMenu(false);
+                setUnreadCount(0);
               }}
               className="relative p-2 rounded-full border border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 transition-colors cursor-pointer"
               aria-label="Notifications"
             >
               <Bell className="w-4 h-4" />
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-600 ring-2 ring-white"></span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-emerald-600 text-white text-[9px] font-extrabold flex items-center justify-center ring-2 ring-white animate-pulse">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
             </button>
 
             {/* Notifications Dropdown Modal */}
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-88 bg-white rounded-2xl shadow-2xl border border-zinc-200 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute -right-12 sm:right-0 mt-2 w-[calc(100vw-32px)] max-w-sm sm:w-88 bg-white rounded-2xl shadow-2xl border border-zinc-200 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
                 <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-sm text-zinc-900">
                       Center Alerts
                     </span>
                     <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded-full">
-                      3 New
+                      {notifications.length} Live
                     </span>
                   </div>
                   <button
@@ -149,41 +158,43 @@ export default function TopNavbar({ activeTab, setActiveTab, onLogout }: TopNavb
                   </button>
                 </div>
                 <div className="divide-y divide-zinc-100 mt-2 max-h-72 overflow-y-auto">
-                  {notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      className="py-2.5 flex items-start gap-2.5 hover:bg-zinc-50/80 rounded-lg px-1.5 transition-colors cursor-pointer"
-                    >
-                      {n.type === "success" && (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-                      )}
-                      {n.type === "warning" && (
-                        <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-                      )}
-                      {n.type === "info" && (
-                        <Clock className="w-4 h-4 text-emerald-800 mt-0.5 shrink-0" />
-                      )}
-                      <div className="flex-1">
-                        <p className="text-xs font-medium text-zinc-900">
-                          {n.title}
-                        </p>
-                        <p className="text-[11px] text-zinc-600 mt-0.5">
-                          {n.desc}
-                        </p>
-                        <span className="text-[10px] text-zinc-600 font-medium">
-                          {n.time}
-                        </span>
-                      </div>
+                  {notifications.length === 0 ? (
+                    <div className="py-8 px-4 text-center">
+                      <Bell className="w-8 h-8 text-zinc-300 mx-auto mb-2 opacity-60" />
+                      <p className="text-xs font-bold text-zinc-700">No New Notifications</p>
+                      <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
+                        Real-time alerts will appear here when farmers log in, register, or book Mandi queue arrival slots.
+                      </p>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-3 pt-2 border-t border-zinc-100 text-center">
-                  <button
-                    onClick={() => setShowNotifications(false)}
-                    className="text-xs font-medium text-emerald-700 hover:text-emerald-800 cursor-pointer"
-                  >
-                    View All Mandi Notifications &rarr;
-                  </button>
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className="py-2.5 flex items-start gap-2.5 hover:bg-zinc-50/80 rounded-lg px-1.5 transition-colors cursor-pointer"
+                      >
+                        {n.type === "success" && (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                        )}
+                        {n.type === "warning" && (
+                          <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                        )}
+                        {n.type === "info" && (
+                          <Clock className="w-4 h-4 text-emerald-800 mt-0.5 shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-zinc-900">
+                            {n.title}
+                          </p>
+                          <p className="text-[11px] text-zinc-600 mt-0.5 leading-snug">
+                            {n.desc}
+                          </p>
+                          <span className="text-[10px] text-zinc-400 font-medium mt-1 inline-block">
+                            ⏱ {n.time}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -199,52 +210,82 @@ export default function TopNavbar({ activeTab, setActiveTab, onLogout }: TopNavb
               className="flex items-center gap-2 p-1 sm:px-2 sm:py-1 rounded-full border border-zinc-200 hover:bg-zinc-50 transition cursor-pointer"
             >
               <div className="relative">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-emerald-800 to-emerald-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
-                  RS
-                </div>
+                {managerPhotoUrl ? (
+                  <img
+                    src={managerPhotoUrl}
+                    alt={managerName}
+                    className="w-7 h-7 rounded-full object-cover border border-emerald-300 shadow-sm"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-emerald-800 to-emerald-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                    {managerName.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
                 <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-1.5 ring-white"></span>
               </div>
               <div className="hidden lg:flex flex-col text-left">
                 <span className="text-xs font-semibold text-zinc-800 leading-tight">
-                  Rajesh Sharma
+                  {managerName}
                 </span>
-                <span className="text-[10px] text-zinc-600">Chief Officer</span>
+                <span className="text-[10px] text-zinc-600">Center Manager</span>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-zinc-400 hidden sm:block" />
             </button>
 
             {/* Profile Menu Dropdown */}
             {showProfileMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-zinc-200 p-2 z-50">
-                <div className="px-3 py-2 border-b border-zinc-100">
-                  <p className="text-xs font-semibold text-zinc-900">
-                    Rajesh Sharma
-                  </p>
-                  <p className="text-[11px] text-zinc-600">
-                    rajesh.sharma@apmc-karnal.gov.in
-                  </p>
-                  <p className="text-[10px] text-emerald-700 font-medium mt-1">
-                    APMC Karnal Hub • Yard #4
-                  </p>
+              <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-zinc-200 p-2 z-50">
+                <div className="px-3 py-2 border-b border-zinc-100 flex items-center gap-2.5">
+                  {managerPhotoUrl ? (
+                    <img
+                      src={managerPhotoUrl}
+                      alt={managerName}
+                      className="w-9 h-9 rounded-full object-cover border border-emerald-300 shadow-sm shrink-0"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-800 to-emerald-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                      {managerName.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="overflow-hidden">
+                    <p className="text-xs font-semibold text-zinc-900 truncate">
+                      {managerName}
+                    </p>
+                    <p className="text-[11px] text-zinc-600 truncate">
+                      {managerEmail}
+                    </p>
+                    <p className="text-[10px] text-emerald-700 font-medium truncate">
+                      {managerCenter}
+                    </p>
+                  </div>
                 </div>
                 <div className="py-1">
                   <button
-                    onClick={() => setShowProfileMenu(false)}
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      setActiveTab("Settings");
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-xs text-emerald-800 font-semibold hover:bg-emerald-50 rounded-lg transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>Edit Profile / विवरण बदलें</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      setActiveTab("Centers");
+                    }}
                     className="w-full text-left px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-100 rounded-lg transition cursor-pointer"
                   >
                     Center Profile & Bays
                   </button>
                   <button
-                    onClick={() => setShowProfileMenu(false)}
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      setActiveTab("Slots & Queue");
+                    }}
                     className="w-full text-left px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-100 rounded-lg transition cursor-pointer"
                   >
-                    Weighbridge Calibration
-                  </button>
-                  <button
-                    onClick={() => setShowProfileMenu(false)}
-                    className="w-full text-left px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-100 rounded-lg transition cursor-pointer"
-                  >
-                    Operator Roster
+                    Live Queue Control
                   </button>
                   {onLogout && (
                     <div className="pt-1 mt-1 border-t border-zinc-100">
