@@ -27,6 +27,8 @@ const KNOWN_TEST_AADHAARS: Record<string, string> = {
   "888888880010": "Harpreet Kaur",
 };
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();

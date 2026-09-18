@@ -5,6 +5,8 @@ declare global {
   var __KRISHI_OTP_CACHE: Map<string, { otp: string; expiresAt: number }> | undefined;
 }
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();

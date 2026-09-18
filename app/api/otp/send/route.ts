@@ -10,6 +10,8 @@ if (!global.__KRISHI_OTP_CACHE) {
 }
 export const otpCache = global.__KRISHI_OTP_CACHE;
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();

@@ -3,6 +3,8 @@ import { verifyAadhaarAndFace } from "@/lib/biometricVerification";
 import { db } from "@/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
