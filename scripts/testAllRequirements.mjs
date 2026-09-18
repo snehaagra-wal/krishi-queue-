@@ -81,11 +81,11 @@ async function runTests() {
   // 4. Test Aadhaar & Bank Strict Name Matching Algorithm
   console.log("\n[Test 4] Testing Strict Name Matching & Format Validation...");
   
-  // Aadhar format check
-  if (!isValidAadhaarFormat("123456789012") || isValidAadhaarFormat("12345678901") || isValidAadhaarFormat("000000000000")) {
-    throw new Error("Aadhaar format validation failed");
+  // Aadhaar Verhoeff format check
+  if (!isValidAadhaarFormat("200000000018") || !isValidAadhaarFormat("367598342109") || isValidAadhaarFormat("123456789012") || isValidAadhaarFormat("12345678901") || isValidAadhaarFormat("000000000000")) {
+    throw new Error("Aadhaar format / Verhoeff checksum validation failed");
   }
-  console.log("✓ PASS: 12-digit Aadhaar format check validated.");
+  console.log("✓ PASS: 12-digit Aadhaar Verhoeff checksum validated (fake 12-digit numbers rejected).");
 
   // Bank format check
   if (!isValidBankAccountFormat("123456789") || !isValidBankAccountFormat("123456789012345678") || isValidBankAccountFormat("12345678")) {

@@ -77,12 +77,116 @@ export function compareNames(registeredName: string, verifiedName: string): {
   };
 }
 
+// ==============================================================================
+// UIDAI OFFICIAL VERHOEFF CHECKSUM ALGORITHM
+// All genuine 12-digit Indian Aadhaar numbers must satisfy this checksum
+// ==============================================================================
+
+const VERHOEFF_D = [
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
+  [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+  [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
+  [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
+  [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+  [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
+  [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
+  [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+  [9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
+];
+
+const VERHOEFF_P = [
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
+  [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+  [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
+  [9, 4, 5, 3, 1, 2, 6, 8, 7, 0],
+  [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+  [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
+  [7, 0, 4, 6, 9, 1, 3, 2, 5, 8],
+];
+
+const VERHOEFF_INV = [0, 4, 3, 2, 1, 5, 6, 7, 8, 9];
+
 /**
- * Validates 12-digit Aadhaar number format
+ * Validates whether a numeric string satisfies the Verhoeff checksum.
+ */
+export function validateVerhoeffChecksum(numStr: string): boolean {
+  if (!numStr || !/^\d+$/.test(numStr)) return false;
+  let c = 0;
+  const digits = numStr.split("").map(Number).reverse();
+  for (let i = 0; i < digits.length; i++) {
+    c = VERHOEFF_D[c][VERHOEFF_P[i % 8][digits[i]]];
+  }
+  return c === 0;
+}
+
+/**
+ * Generates the Verhoeff check digit for an 11-digit prefix.
+ */
+export function generateVerhoeffCheckDigit(num11Str: string): number {
+  let c = 0;
+  const digits = num11Str.split("").map(Number).reverse();
+  for (let i = 0; i < digits.length; i++) {
+    c = VERHOEFF_D[c][VERHOEFF_P[(i + 1) % 8][digits[i]]];
+  }
+  return VERHOEFF_INV[c];
+}
+
+/**
+ * Validates 12-digit Aadhaar number against UIDAI rules:
+ * 1. Exactly 12 numeric digits
+ * 2. Cannot start with 0 or 1 (UIDAI standard allocation: 2-9)
+ * 3. Cannot be 12 identical digits (e.g. 222222222222)
+ * 4. Must strictly satisfy the Verhoeff checksum algorithm
  */
 export function isValidAadhaarFormat(aadhaar: string): boolean {
   const clean = (aadhaar || "").replace(/\D/g, "");
-  return clean.length === 12 && !/^(0{12}|1{12}|9{12})$/.test(clean);
+  if (clean.length !== 12) return false;
+  if (/^[01]/.test(clean)) return false;
+  if (/^(\d)\1{11}$/.test(clean)) return false;
+  return validateVerhoeffChecksum(clean);
+}
+
+/**
+ * Detailed Aadhaar validator with descriptive error message
+ */
+export function validateAadhaarDetails(aadhaar: string): {
+  isValid: boolean;
+  error?: string;
+} {
+  const clean = (aadhaar || "").replace(/\D/g, "");
+
+  if (clean.length !== 12) {
+    return {
+      isValid: false,
+      error: "Aadhaar card number must be exactly 12 numeric digits.",
+    };
+  }
+
+  if (/^[01]/.test(clean)) {
+    return {
+      isValid: false,
+      error: "Invalid Aadhaar: UIDAI numbers cannot start with 0 or 1.",
+    };
+  }
+
+  if (/^(\d)\1{11}$/.test(clean)) {
+    return {
+      isValid: false,
+      error: "Invalid Aadhaar: Number cannot contain 12 identical repeating digits.",
+    };
+  }
+
+  if (!validateVerhoeffChecksum(clean)) {
+    return {
+      isValid: false,
+      error:
+        "Invalid Aadhaar: Number failed UIDAI Verhoeff mathematical checksum verification.",
+    };
+  }
+
+  return { isValid: true };
 }
 
 /**

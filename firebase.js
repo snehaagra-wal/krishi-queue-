@@ -21,21 +21,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Initialize Analytics conditionally (runs only on client-side)
-let analytics = null;
-if (typeof window !== "undefined") {
-  import("firebase/analytics")
-    .then(({ getAnalytics, isSupported }) => {
-      isSupported().then((supported) => {
-        if (supported) {
-          analytics = getAnalytics(app);
-        }
-      });
-    })
-    .catch((err) => {
-      console.warn("Firebase Analytics could not be initialized:", err);
-    });
-}
+// Analytics disabled: Prevents unused Firebase Installations API 400 key errors
+const analytics = null;
 
 export { app, auth, db, storage, analytics };
 export default app;

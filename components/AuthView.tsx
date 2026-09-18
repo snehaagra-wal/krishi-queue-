@@ -106,18 +106,11 @@ export default function AuthView({ onLogin, initialRole = "farmer", onClose }: A
     return Array.from(centerMap.values());
   }, [centers]);
 
-  // Pre-fill farmer name with "xyz" as requested, replacing any old phone number
-  const [loginPhone, setLoginPhone] = useState("xyz");
+  // Farmer login identifier (blank by default, placeholder shows 'xyz')
+  const [loginPhone, setLoginPhone] = useState("");
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showLoginPassword, setShowLoginPassword] = useState(false);
-
-  // Safeguard: If browser attempts to autofill old 10-digit phone number, replace with "xyz"
-  useEffect(() => {
-    if (role === "farmer" && /^\d{10}$/.test(loginPhone.trim())) {
-      setLoginPhone("xyz");
-    }
-  }, [role, loginPhone]);
 
   // Sign up form fields
   const [signupName, setSignupName] = useState("");
@@ -818,7 +811,7 @@ export default function AuthView({ onLogin, initialRole = "farmer", onClose }: A
                 <User className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder={role === "farmer" ? "Balwinder Sandhu" : "Officer Name"}
+                  placeholder={role === "farmer" ? "xyz" : "Officer Name"}
                   value={signupName}
                   onChange={(e) => setSignupName(e.target.value)}
                   required

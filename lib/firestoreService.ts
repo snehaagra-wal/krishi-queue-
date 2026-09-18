@@ -373,8 +373,10 @@ export async function getNextSequentialToken(): Promise<string> {
 
     let maxNumber = 0;
     snap.docs.forEach((d) => {
-      const tokenId = d.data().tokenId || "";
-      const match = tokenId.match(/TK-(\d+)/i);
+      const data = d.data();
+      const rawToken = (data.tokenId || "").toString().trim();
+      // Support patterns: "TK-1", "#TK-1", "TK1", or numeric "1"
+      const match = rawToken.match(/(?:TK-?|#)?(\d+)/i);
       if (match && match[1]) {
         const num = parseInt(match[1], 10);
         if (!isNaN(num) && num > maxNumber) {
@@ -1666,6 +1668,19 @@ export async function verifyFarmerAadhaar(
     aadhaarNumber,
     aadhaarVerified: true,
     verified: true,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Clear farmer's Aadhaar verification in Firestore to allow testing & re-verification
+ */
+export async function clearFarmerAadhaar(farmerId: string): Promise<void> {
+  const docRef = doc(db, "farmers", farmerId);
+  await updateDoc(docRef, {
+    aadhaarNumber: "",
+    aadhaarVerified: false,
+    verified: false,
     updatedAt: serverTimestamp(),
   });
 }
